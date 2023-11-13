@@ -869,7 +869,7 @@ def on_ui_tabs():
         if len(cn_ipa_module_ids) > 0 and len(cn_ipa_model_ids) > 0:
             cn_ip_adapter = True
 
-    webui_inpaint_enabled = True
+    webui_inpaint_enabled = False
     webui_model_ids = get_inp_webui_model_ids()
     if len(webui_model_ids) > 0:
         webui_inpaint_enabled = True

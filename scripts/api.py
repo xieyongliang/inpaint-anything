@@ -172,11 +172,11 @@ def auto_resize_to_pil(input_image, mask_image):
 def inpaint_anything_api(_: gr.Blocks, app: FastAPI):
     app.add_api_route('/inpaint-anything/sam', sam_api, methods=["POST"], response_model=SamResponse)
     app.add_api_route('/inpaint-anything/mask', mask_api, methods=["POST"], response_model=MaskResponse)
+    app.add_api_route('/inpaint-anything/cninpaint', cninpaint_api, methods=["POST"], response_model=CNInpaintResponse)
     app.add_api_route('/inpaint-anything/padding', padding_api, methods=["POST"], response_model=PaddingResponse)
     app.add_api_route('/inpaint-anything/expand-mask', expand_mask_api, methods=["POST"], response_model=ExpandMaskResponse)
     app.add_api_route('/inpaint-anything/apply-mask', apply_mask_api, methods=["POST"], response_model=ApplyMaskResponse)
     app.add_api_route('/inpaint-anything/add-mask', add_mask_api, methods=["POST"], response_model=AddMaskResponse)
-    app.add_api_route('/inpaint-anything/cninpaint', cninpaint_api, methods=["POST"], response_model=CNInpaintResponse)
 
 def decode_base64_to_image(encoding):
     if encoding.startswith("data:image/"):
