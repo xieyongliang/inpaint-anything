@@ -628,6 +628,9 @@ def run_cn_inpaint(input_image, sel_mask,
     backup_alwayson_scripts(p.scripts)
     disable_alwayson_scripts_wo_cn(cnet, p.scripts)
 
+    init_image.save('init1.png')
+    mask_image.save('mask1.png')
+
     cn_units = [cnet.to_processing_unit(dict(
         enabled=True,
         module=cn_module_id,
@@ -866,7 +869,7 @@ def on_ui_tabs():
         if len(cn_ipa_module_ids) > 0 and len(cn_ipa_model_ids) > 0:
             cn_ip_adapter = True
 
-    webui_inpaint_enabled = False
+    webui_inpaint_enabled = True
     webui_model_ids = get_inp_webui_model_ids()
     if len(webui_model_ids) > 0:
         webui_inpaint_enabled = True
@@ -882,29 +885,29 @@ def on_ui_tabs():
 
     with gr.Blocks(analytics_enabled=False) as inpaint_anything_interface:
         with gr.Row():
-            with gr.Column():
-                with gr.Row():
-                    with gr.Column():
-                        sam_model_id = gr.Dropdown(label="Segment Anything Model ID", elem_id="sam_model_id", choices=sam_model_ids,
-                                                   value=sam_model_ids[sam_model_index], show_label=True)
-                    with gr.Column():
-                        with gr.Row():
-                            load_model_btn = gr.Button("Download model", elem_id="load_model_btn")
-                        with gr.Row():
-                            status_text = gr.Textbox(label="", elem_id="status_text", max_lines=1, show_label=False, interactive=False)
-                with gr.Row():
-                    input_image = gr.Image(label="Input image", elem_id="ia_input_image", source="upload", type="numpy", interactive=True)
+            sam_model_id = gr.Dropdown(label="Segment Anything Model ID", elem_id="sam_model_id", choices=sam_model_ids,
+                            value=sam_model_ids[sam_model_index], show_label=True, visible=False)
+            load_model_btn = gr.Button("Download model", elem_id="load_model_btn", visible=False)
+            status_text = gr.Textbox(label="", elem_id="status_text", max_lines=1, show_label=False, interactive=False, visible=False)
 
-                with gr.Row():
+        with gr.Accordion("Step 1. Upload your image and create image segmentation using segment-anything", elem_id="step1", open=True):
+            with gr.Row():
+                    input_image = gr.Image(label="Input image", elem_id="ia_input_image", source="upload", type="numpy", interactive=True, height=480)
+
+            with gr.Row():
+                with gr.Column(scale=2):
+                    anime_style_chk = gr.Checkbox(label="Anime Style (Up Detection, Down mask Quality)", elem_id="anime_style_chk",
+                                                show_label=True, interactive=True)
+                with gr.Column(scale=4):
                     with gr.Accordion("Padding options", elem_id="padding_options", open=False):
                         with gr.Row():
                             with gr.Column():
                                 pad_scale_width = gr.Slider(label="Scale Width", elem_id="pad_scale_width", minimum=1.0, maximum=1.5, value=1.0, step=0.01)
                             with gr.Column():
-                                pad_lr_barance = gr.Slider(label="Left/Right Balance", elem_id="pad_lr_barance", minimum=0.0, maximum=1.0, value=0.5, step=0.01)
+                                pad_scale_height = gr.Slider(label="Scale Height", elem_id="pad_scale_height", minimum=1.0, maximum=1.5, value=1.0, step=0.01)
                         with gr.Row():
                             with gr.Column():
-                                pad_scale_height = gr.Slider(label="Scale Height", elem_id="pad_scale_height", minimum=1.0, maximum=1.5, value=1.0, step=0.01)
+                                pad_lr_barance = gr.Slider(label="Left/Right Balance", elem_id="pad_lr_barance", minimum=0.0, maximum=1.0, value=0.5, step=0.01)
                             with gr.Column():
                                 pad_tb_barance = gr.Slider(label="Top/Bottom Balance", elem_id="pad_tb_barance", minimum=0.0, maximum=1.0, value=0.5, step=0.01)
                         with gr.Row():
@@ -913,300 +916,306 @@ def on_ui_tabs():
                             with gr.Column():
                                 padding_btn = gr.Button("Run Padding", elem_id="padding_btn")
 
-                with gr.Row():
-                    with gr.Column():
-                        anime_style_chk = gr.Checkbox(label="Anime Style (Up Detection, Down mask Quality)", elem_id="anime_style_chk",
-                                                      show_label=True, interactive=True)
-                    with gr.Column():
-                        sam_btn = gr.Button("Run Segment Anything", elem_id="sam_btn", variant="primary", interactive=False)
+            with gr.Row():
+                with gr.Column(scale=3):
+                    gr.HTML('')
+                with gr.Column(scale=1):
+                    sam_btn = gr.Button("Run Segment Anything", elem_id="sam_btn", variant="primary", interactive=False)
 
-                with gr.Tab("Inpainting", elem_id="inpainting_tab"):
+        with gr.Accordion("Step 2. Create image mask based on selected image segmentation", elem_id="step2", open=False):
+            with gr.Row():
+                if ia_check_versions.gradio_version_is_old:
+                    sam_image = gr.Image(label="Segment Anything image", elem_id="ia_sam_image", type="numpy", tool="sketch", brush_radius=8,
+                                            show_label=False, interactive=True).style(height=480)
+                else:
+                    sam_image = gr.Image(label="Segment Anything image", elem_id="ia_sam_image", type="numpy", tool="sketch", brush_radius=8,
+                                                show_label=False, interactive=True, height=480)
+            with gr.Row():
+                with gr.Column(scale=3):
                     with gr.Row():
                         with gr.Column():
-                            prompt = gr.Textbox(label="Inpainting Prompt", elem_id="ia_sd_prompt")
-                            n_prompt = gr.Textbox(label="Negative Prompt", elem_id="ia_sd_n_prompt")
+                                invert_chk = gr.Checkbox(label="Invert mask", elem_id="invert_chk", show_label=True, interactive=True)
+                        with gr.Column():
+                                ignore_black_chk = gr.Checkbox(label="Ignore black area", elem_id="ignore_black_chk", value=True, show_label=True, interactive=True)
+                with gr.Column(scale=1):
+                    select_btn = gr.Button("Create Mask", elem_id="select_btn", variant="primary")
+
+        with gr.Accordion("Step 3. Preview image mask and adjust if needed", elem_id="step3", open=False):
+            with gr.Row():
+                if ia_check_versions.gradio_version_is_old:
+                    sel_mask = gr.Image(label="Selected mask image", elem_id="ia_sel_mask", type="numpy", tool="sketch", brush_radius=12,
+                                        show_label=False, interactive=True).style(height=480)
+                else:
+                    sel_mask = gr.Image(label="Selected mask image", elem_id="ia_sel_mask", type="numpy", tool="sketch", brush_radius=12,
+                                        show_label=False, interactive=True, height=480)
+
+            with gr.Row():
+                expand_mask_iteration_count = gr.Slider(label="Expand Mask Iterations",
+                                                        elem_id="expand_mask_iteration_count", minimum=1, maximum=100, value=1, step=1)
+            with gr.Row():
+                with gr.Column(scale=1):
+                    expand_mask_btn = gr.Button("Expand mask region", elem_id="expand_mask_btn")
+                with gr.Column(scale=1):
+                    apply_mask_btn = gr.Button("Trim mask by sketch", elem_id="apply_mask_btn")
+                with gr.Column(scale=1):
+                    add_mask_btn = gr.Button("Add mask by sketch", elem_id="add_mask_btn")
+
+        with gr.Accordion("Step 4. Inpaint or mask only", elem_id="step4", open=False):
+            with gr.Tab("Inpainting", elem_id="inpainting_tab", render=False):
+                with gr.Column():
+                    prompt = gr.Textbox(label="Inpainting Prompt", elem_id="sd_prompt")
+                    n_prompt = gr.Textbox(label="Negative Prompt", elem_id="sd_n_prompt")
+                with gr.Column(scale=0, min_width=128):
+                    gr.Markdown("Get prompt from:")
+                    get_txt2img_prompt_btn = gr.Button("txt2img", elem_id="get_txt2img_prompt_btn")
+                    get_img2img_prompt_btn = gr.Button("img2img", elem_id="get_img2img_prompt_btn")
+
+                with gr.Accordion("Advanced options", elem_id="inp_advanced_options", open=False):
+                    composite_chk = gr.Checkbox(label="Mask area Only", elem_id="composite_chk", value=True, show_label=True, interactive=True)
+                    with gr.Row():
+                        with gr.Column():
+                            sampler_name = gr.Dropdown(label="Sampler", elem_id="sampler_name", choices=sampler_names,
+                                                        value=sampler_names[0], show_label=True)
+                        with gr.Column():
+                            ddim_steps = gr.Slider(label="Sampling Steps", elem_id="ddim_steps", minimum=1, maximum=100, value=20, step=1)
+                    cfg_scale = gr.Slider(label="Guidance Scale", elem_id="cfg_scale", minimum=0.1, maximum=30.0, value=7.5, step=0.1)
+                    seed = gr.Slider(
+                        label="Seed",
+                        elem_id="sd_seed",
+                        minimum=-1,
+                        maximum=2147483647,
+                        step=1,
+                        value=-1,
+                    )
+                with gr.Row():
+                    with gr.Column():
+                        inp_model_id = gr.Dropdown(label="Inpainting Model ID", elem_id="inp_model_id",
+                                                    choices=inp_model_ids, value=inp_model_ids[inp_model_index], show_label=True)
+                    with gr.Column():
+                        with gr.Row():
+                            save_mask_chk = gr.Checkbox(label="Save mask", elem_id="save_mask_chk",
+                                                        value=False, show_label=False, interactive=False, visible=False)
+                            iteration_count = gr.Slider(label="Iterations", elem_id="iteration_count", minimum=1, maximum=10, value=1, step=1)
+                with gr.Row():
+                    with gr.Column(scale=3):
+                        gr.HTML('')
+                    with gr.Column(scale=1):
+                        inpaint_btn = gr.Button("Run Inpainting", elem_id="inpaint_btn", variant="primary")
+
+                with gr.Row():
+                    if ia_check_versions.gradio_version_is_old:
+                        out_image = gr.Gallery(label="Inpainted image", elem_id="ia_out_image", show_label=False
+                                                ).style(**out_gallery_kwargs)
+                    else:
+                        out_image = gr.Gallery(label="Inpainted image", elem_id="ia_out_image", show_label=False,
+                                                **out_gallery_kwargs)
+
+            with gr.Tab("Cleaner", elem_id="cleaner_tab", render=False):
+                with gr.Row():
+                    with gr.Column():
+                        cleaner_model_id = gr.Dropdown(label="Cleaner Model ID", elem_id="cleaner_model_id",
+                                                        choices=cleaner_model_ids, value=cleaner_model_ids[0], show_label=True)
+                    with gr.Column():
+                        with gr.Row():
+                            cleaner_btn = gr.Button("Run Cleaner", elem_id="cleaner_btn", variant="primary")
+                        with gr.Row():
+                            cleaner_save_mask_chk = gr.Checkbox(label="Save mask", elem_id="cleaner_save_mask_chk",
+                                                                value=False, show_label=False, interactive=False, visible=False)
+
+                with gr.Row():
+                    if ia_check_versions.gradio_version_is_old:
+                        cleaner_out_image = gr.Gallery(label="Cleaned image", elem_id="ia_cleaner_out_image", show_label=False
+                                                        ).style(**out_gallery_kwargs)
+                    else:
+                        cleaner_out_image = gr.Gallery(label="Cleaned image", elem_id="ia_cleaner_out_image", show_label=False,
+                                                        **out_gallery_kwargs)
+
+            if webui_inpaint_enabled:
+                with gr.Tab("Inpainting webui", elem_id="webui_inpainting_tab", render=False):
+                    with gr.Row():
+                        with gr.Column():
+                            webui_prompt = gr.Textbox(label="Inpainting Prompt", elem_id="ia_webui_sd_prompt")
+                            webui_n_prompt = gr.Textbox(label="Negative Prompt", elem_id="ia_webui_sd_n_prompt")
                         with gr.Column(scale=0, min_width=128):
                             gr.Markdown("Get prompt from:")
-                            get_txt2img_prompt_btn = gr.Button("txt2img", elem_id="get_txt2img_prompt_btn")
-                            get_img2img_prompt_btn = gr.Button("img2img", elem_id="get_img2img_prompt_btn")
-                    with gr.Accordion("Advanced options", elem_id="inp_advanced_options", open=False):
-                        composite_chk = gr.Checkbox(label="Mask area Only", elem_id="composite_chk", value=True, show_label=True, interactive=True)
+                            webui_get_txt2img_prompt_btn = gr.Button("txt2img", elem_id="webui_get_txt2img_prompt_btn")
+                            webui_get_img2img_prompt_btn = gr.Button("img2img", elem_id="webui_get_img2img_prompt_btn")
+                    with gr.Accordion("Advanced options", elem_id="webui_advanced_options", open=False):
+                        webui_mask_blur = gr.Slider(label="Mask blur", minimum=0, maximum=64, step=1, value=4, elem_id="webui_mask_blur")
+                        webui_fill_mode = gr.Radio(label="Masked content", elem_id="webui_fill_mode",
+                                                    choices=["fill", "original", "latent noise", "latent nothing"], value="original", type="index")
                         with gr.Row():
                             with gr.Column():
-                                sampler_name = gr.Dropdown(label="Sampler", elem_id="sampler_name", choices=sampler_names,
-                                                           value=sampler_names[0], show_label=True)
+                                webui_sampler_id = gr.Dropdown(label="Sampling method webui", elem_id="webui_sampler_id",
+                                                                choices=webui_sampler_ids, value=webui_sampler_ids[webui_sampler_index], show_label=True)
                             with gr.Column():
-                                ddim_steps = gr.Slider(label="Sampling Steps", elem_id="ddim_steps", minimum=1, maximum=100, value=20, step=1)
-                        cfg_scale = gr.Slider(label="Guidance Scale", elem_id="cfg_scale", minimum=0.1, maximum=30.0, value=7.5, step=0.1)
-                        seed = gr.Slider(
+                                webui_ddim_steps = gr.Slider(label="Sampling steps webui", elem_id="webui_ddim_steps",
+                                                                minimum=1, maximum=150, value=30, step=1)
+                        webui_cfg_scale = gr.Slider(label="Guidance scale webui", elem_id="webui_cfg_scale", minimum=0.1, maximum=30.0, value=7.5, step=0.1)
+                        webui_strength = gr.Slider(label="Denoising strength webui", elem_id="webui_strength",
+                                                    minimum=0.0, maximum=1.0, value=0.75, step=0.01)
+                        webui_seed = gr.Slider(
                             label="Seed",
-                            elem_id="sd_seed",
+                            elem_id="webui_sd_seed",
                             minimum=-1,
                             maximum=2147483647,
                             step=1,
                             value=-1,
                         )
-                    with gr.Row():
-                        with gr.Column():
-                            inp_model_id = gr.Dropdown(label="Inpainting Model ID", elem_id="inp_model_id",
-                                                       choices=inp_model_ids, value=inp_model_ids[inp_model_index], show_label=True)
-                        with gr.Column():
+                    if ia_check_versions.webui_refiner_is_available:
+                        with gr.Accordion("Refiner options", elem_id="webui_refiner_options", open=False):
                             with gr.Row():
-                                inpaint_btn = gr.Button("Run Inpainting", elem_id="inpaint_btn", variant="primary")
+                                webui_enable_refiner_chk = gr.Checkbox(label="Enable Refiner", elem_id="webui_enable_refiner_chk",
+                                                                        value=False, show_label=True, interactive=True)
                             with gr.Row():
-                                save_mask_chk = gr.Checkbox(label="Save mask", elem_id="save_mask_chk",
-                                                            value=False, show_label=False, interactive=False, visible=False)
-                                iteration_count = gr.Slider(label="Iterations", elem_id="iteration_count", minimum=1, maximum=10, value=1, step=1)
+                                webui_refiner_checkpoint = gr.Dropdown(label="Refiner Model ID", elem_id="webui_refiner_checkpoint",
+                                                                        choices=shared.list_checkpoint_tiles(), value="")
+                                webui_refiner_switch_at = gr.Slider(value=0.8, label="Switch at", minimum=0.01, maximum=1.0, step=0.01,
+                                                                    elem_id="webui_refiner_switch_at")
 
                     with gr.Row():
-                        if ia_check_versions.gradio_version_is_old:
-                            out_image = gr.Gallery(label="Inpainted image", elem_id="ia_out_image", show_label=False
-                                                   ).style(**out_gallery_kwargs)
-                        else:
-                            out_image = gr.Gallery(label="Inpainted image", elem_id="ia_out_image", show_label=False,
-                                                   **out_gallery_kwargs)
-
-                with gr.Tab("Cleaner", elem_id="cleaner_tab"):
-                    with gr.Row():
                         with gr.Column():
-                            cleaner_model_id = gr.Dropdown(label="Cleaner Model ID", elem_id="cleaner_model_id",
-                                                           choices=cleaner_model_ids, value=cleaner_model_ids[0], show_label=True)
+                            webui_model_id = gr.Dropdown(label="Inpainting Model ID webui", elem_id="webui_model_id",
+                                                            choices=webui_model_ids, value=webui_model_ids[webui_model_index], show_label=True)
                         with gr.Column():
                             with gr.Row():
-                                cleaner_btn = gr.Button("Run Cleaner", elem_id="cleaner_btn", variant="primary")
+                                webui_inpaint_btn = gr.Button("Run Inpainting", elem_id="webui_inpaint_btn", variant="primary")
                             with gr.Row():
-                                cleaner_save_mask_chk = gr.Checkbox(label="Save mask", elem_id="cleaner_save_mask_chk",
+                                webui_save_mask_chk = gr.Checkbox(label="Save mask", elem_id="webui_save_mask_chk",
                                                                     value=False, show_label=False, interactive=False, visible=False)
+                                webui_iteration_count = gr.Slider(label="Iterations", elem_id="webui_iteration_count",
+                                                                    minimum=1, maximum=10, value=1, step=1)
 
                     with gr.Row():
                         if ia_check_versions.gradio_version_is_old:
-                            cleaner_out_image = gr.Gallery(label="Cleaned image", elem_id="ia_cleaner_out_image", show_label=False
-                                                           ).style(**out_gallery_kwargs)
+                            webui_out_image = gr.Gallery(label="Inpainted image", elem_id="ia_webui_out_image", show_label=False
+                                                            ).style(**out_gallery_kwargs)
                         else:
-                            cleaner_out_image = gr.Gallery(label="Cleaned image", elem_id="ia_cleaner_out_image", show_label=False,
-                                                           **out_gallery_kwargs)
+                            webui_out_image = gr.Gallery(label="Inpainted image", elem_id="ia_webui_out_image", show_label=False,
+                                                            **out_gallery_kwargs)
 
-                if webui_inpaint_enabled:
-                    with gr.Tab("Inpainting webui", elem_id="webui_inpainting_tab"):
+            with gr.Tab("ControlNet Inpaint", elem_id="cn_inpaint_tab"):
+                if cn_enabled:
+                    with gr.Row():
+                        with gr.Column():
+                            cn_prompt = gr.Textbox(label="Inpainting Prompt", elem_id="ia_cn_sd_prompt")
+                            cn_n_prompt = gr.Textbox(label="Negative Prompt", elem_id="ia_cn_sd_n_prompt")
+                        with gr.Column(scale=0, min_width=128):
+                            gr.Markdown("Get prompt from:")
+                            cn_get_txt2img_prompt_btn = gr.Button("txt2img", elem_id="cn_get_txt2img_prompt_btn")
+                            cn_get_img2img_prompt_btn = gr.Button("img2img", elem_id="cn_get_img2img_prompt_btn")
+                    with gr.Accordion("Advanced options", elem_id="cn_advanced_options", open=False):
                         with gr.Row():
                             with gr.Column():
-                                webui_prompt = gr.Textbox(label="Inpainting Prompt", elem_id="ia_webui_sd_prompt")
-                                webui_n_prompt = gr.Textbox(label="Negative Prompt", elem_id="ia_webui_sd_n_prompt")
-                            with gr.Column(scale=0, min_width=128):
-                                gr.Markdown("Get prompt from:")
-                                webui_get_txt2img_prompt_btn = gr.Button("txt2img", elem_id="webui_get_txt2img_prompt_btn")
-                                webui_get_img2img_prompt_btn = gr.Button("img2img", elem_id="webui_get_img2img_prompt_btn")
-                        with gr.Accordion("Advanced options", elem_id="webui_advanced_options", open=False):
-                            webui_mask_blur = gr.Slider(label="Mask blur", minimum=0, maximum=64, step=1, value=4, elem_id="webui_mask_blur")
-                            webui_fill_mode = gr.Radio(label="Masked content", elem_id="webui_fill_mode",
-                                                       choices=["fill", "original", "latent noise", "latent nothing"], value="original", type="index")
+                                cn_sampler_id = gr.Dropdown(label="Sampling method", elem_id="cn_sampler_id",
+                                                            choices=cn_sampler_ids, value=cn_sampler_ids[cn_sampler_index], show_label=True)
+                            with gr.Column():
+                                cn_ddim_steps = gr.Slider(label="Sampling steps", elem_id="cn_ddim_steps", minimum=1, maximum=150, value=30, step=1)
+                        cn_cfg_scale = gr.Slider(label="Guidance scale", elem_id="cn_cfg_scale", minimum=0.1, maximum=30.0, value=7.5, step=0.1)
+                        cn_strength = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, label="Denoising strength", value=0.75, elem_id="cn_strength")
+                        cn_seed = gr.Slider(
+                            label="Seed",
+                            elem_id="cn_sd_seed",
+                            minimum=-1,
+                            maximum=2147483647,
+                            step=1,
+                            value=-1,
+                        )
+                    with gr.Accordion("ControlNet options", elem_id="cn_cn_options", open=False):
+                        with gr.Row():
+                            with gr.Column():
+                                cn_low_vram_chk = gr.Checkbox(label="Low VRAM", elem_id="cn_low_vram_chk", value=True, show_label=True, interactive=True)
+                                cn_weight = gr.Slider(label="Control Weight", elem_id="cn_weight", minimum=0.0, maximum=2.0, value=1.0, step=0.05)
+                            with gr.Column():
+                                cn_mode = gr.Dropdown(label="Control Mode", elem_id="cn_mode", choices=cn_modes, value=cn_modes[-1], show_label=True)
+
+                        if cn_ref_only:
                             with gr.Row():
                                 with gr.Column():
-                                    webui_sampler_id = gr.Dropdown(label="Sampling method webui", elem_id="webui_sampler_id",
-                                                                   choices=webui_sampler_ids, value=webui_sampler_ids[webui_sampler_index], show_label=True)
+                                    cn_md_text = "Reference Control (enabled with image below)"
+                                    if not cn_ip_adapter:
+                                        cn_md_text = cn_md_text + ("<br><span style='color: gray;'>"
+                                                                    "[IP-Adapter](https://huggingface.co/lllyasviel/sd_control_collection/tree/main) "
+                                                                    "is not available. Reference-Only is used.</span>")
+                                    gr.Markdown(cn_md_text)
+                                    if cn_ip_adapter:
+                                        cn_ipa_or_ref = gr.Radio(label="IP-Adapter or Reference-Only", elem_id="cn_ipa_or_ref",
+                                                                    choices=["IP-Adapter", "Reference-Only"], value="IP-Adapter", show_label=False)
+                                    cn_ref_image = gr.Image(label="Reference Image", elem_id="cn_ref_image", source="upload", type="numpy",
+                                                            interactive=True)
                                 with gr.Column():
-                                    webui_ddim_steps = gr.Slider(label="Sampling steps webui", elem_id="webui_ddim_steps",
-                                                                 minimum=1, maximum=150, value=30, step=1)
-                            webui_cfg_scale = gr.Slider(label="Guidance scale webui", elem_id="webui_cfg_scale", minimum=0.1, maximum=30.0, value=7.5, step=0.1)
-                            webui_strength = gr.Slider(label="Denoising strength webui", elem_id="webui_strength",
-                                                       minimum=0.0, maximum=1.0, value=0.75, step=0.01)
-                            webui_seed = gr.Slider(
-                                label="Seed",
-                                elem_id="webui_sd_seed",
-                                minimum=-1,
-                                maximum=2147483647,
-                                step=1,
-                                value=-1,
-                            )
-                        if ia_check_versions.webui_refiner_is_available:
-                            with gr.Accordion("Refiner options", elem_id="webui_refiner_options", open=False):
-                                with gr.Row():
-                                    webui_enable_refiner_chk = gr.Checkbox(label="Enable Refiner", elem_id="webui_enable_refiner_chk",
-                                                                           value=False, show_label=True, interactive=True)
-                                with gr.Row():
-                                    webui_refiner_checkpoint = gr.Dropdown(label="Refiner Model ID", elem_id="webui_refiner_checkpoint",
-                                                                           choices=shared.list_checkpoint_tiles(), value="")
-                                    webui_refiner_switch_at = gr.Slider(value=0.8, label="Switch at", minimum=0.01, maximum=1.0, step=0.01,
-                                                                        elem_id="webui_refiner_switch_at")
-
-                        with gr.Row():
-                            with gr.Column():
-                                webui_model_id = gr.Dropdown(label="Inpainting Model ID webui", elem_id="webui_model_id",
-                                                             choices=webui_model_ids, value=webui_model_ids[webui_model_index], show_label=True)
-                            with gr.Column():
-                                with gr.Row():
-                                    webui_inpaint_btn = gr.Button("Run Inpainting", elem_id="webui_inpaint_btn", variant="primary")
-                                with gr.Row():
-                                    webui_save_mask_chk = gr.Checkbox(label="Save mask", elem_id="webui_save_mask_chk",
-                                                                      value=False, show_label=False, interactive=False, visible=False)
-                                    webui_iteration_count = gr.Slider(label="Iterations", elem_id="webui_iteration_count",
-                                                                      minimum=1, maximum=10, value=1, step=1)
-
-                        with gr.Row():
-                            if ia_check_versions.gradio_version_is_old:
-                                webui_out_image = gr.Gallery(label="Inpainted image", elem_id="ia_webui_out_image", show_label=False
-                                                             ).style(**out_gallery_kwargs)
-                            else:
-                                webui_out_image = gr.Gallery(label="Inpainted image", elem_id="ia_webui_out_image", show_label=False,
-                                                             **out_gallery_kwargs)
-
-                with gr.Tab("ControlNet Inpaint", elem_id="cn_inpaint_tab"):
-                    if cn_enabled:
-                        with gr.Row():
-                            with gr.Column():
-                                cn_prompt = gr.Textbox(label="Inpainting Prompt", elem_id="ia_cn_sd_prompt")
-                                cn_n_prompt = gr.Textbox(label="Negative Prompt", elem_id="ia_cn_sd_n_prompt")
-                            with gr.Column(scale=0, min_width=128):
-                                gr.Markdown("Get prompt from:")
-                                cn_get_txt2img_prompt_btn = gr.Button("txt2img", elem_id="cn_get_txt2img_prompt_btn")
-                                cn_get_img2img_prompt_btn = gr.Button("img2img", elem_id="cn_get_img2img_prompt_btn")
-                        with gr.Accordion("Advanced options", elem_id="cn_advanced_options", open=False):
-                            with gr.Row():
-                                with gr.Column():
-                                    cn_sampler_id = gr.Dropdown(label="Sampling method", elem_id="cn_sampler_id",
-                                                                choices=cn_sampler_ids, value=cn_sampler_ids[cn_sampler_index], show_label=True)
-                                with gr.Column():
-                                    cn_ddim_steps = gr.Slider(label="Sampling steps", elem_id="cn_ddim_steps", minimum=1, maximum=150, value=30, step=1)
-                            cn_cfg_scale = gr.Slider(label="Guidance scale", elem_id="cn_cfg_scale", minimum=0.1, maximum=30.0, value=7.5, step=0.1)
-                            cn_strength = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, label="Denoising strength", value=0.75, elem_id="cn_strength")
-                            cn_seed = gr.Slider(
-                                label="Seed",
-                                elem_id="cn_sd_seed",
-                                minimum=-1,
-                                maximum=2147483647,
-                                step=1,
-                                value=-1,
-                            )
-                        with gr.Accordion("ControlNet options", elem_id="cn_cn_options", open=False):
-                            with gr.Row():
-                                with gr.Column():
-                                    cn_low_vram_chk = gr.Checkbox(label="Low VRAM", elem_id="cn_low_vram_chk", value=True, show_label=True, interactive=True)
-                                    cn_weight = gr.Slider(label="Control Weight", elem_id="cn_weight", minimum=0.0, maximum=2.0, value=1.0, step=0.05)
-                                with gr.Column():
-                                    cn_mode = gr.Dropdown(label="Control Mode", elem_id="cn_mode", choices=cn_modes, value=cn_modes[-1], show_label=True)
-
-                            if cn_ref_only:
-                                with gr.Row():
-                                    with gr.Column():
-                                        cn_md_text = "Reference Control (enabled with image below)"
-                                        if not cn_ip_adapter:
-                                            cn_md_text = cn_md_text + ("<br><span style='color: gray;'>"
-                                                                       "[IP-Adapter](https://huggingface.co/lllyasviel/sd_control_collection/tree/main) "
-                                                                       "is not available. Reference-Only is used.</span>")
-                                        gr.Markdown(cn_md_text)
-                                        if cn_ip_adapter:
-                                            cn_ipa_or_ref = gr.Radio(label="IP-Adapter or Reference-Only", elem_id="cn_ipa_or_ref",
-                                                                     choices=["IP-Adapter", "Reference-Only"], value="IP-Adapter", show_label=False)
-                                        cn_ref_image = gr.Image(label="Reference Image", elem_id="cn_ref_image", source="upload", type="numpy",
-                                                                interactive=True)
-                                    with gr.Column():
-                                        cn_ref_resize_mode = gr.Radio(label="Reference Image Resize Mode", elem_id="cn_ref_resize_mode",
-                                                                      choices=["resize", "tile"], value="resize", show_label=True)
-                                        if cn_ip_adapter:
-                                            cn_ipa_model_id = gr.Dropdown(label="IP-Adapter Model ID", elem_id="cn_ipa_model_id",
-                                                                          choices=cn_ipa_model_ids, value=cn_ipa_model_ids[0], show_label=True)
-                                        cn_ref_module_id = gr.Dropdown(label="Reference Type for Reference-Only", elem_id="cn_ref_module_id",
-                                                                       choices=cn_ref_module_ids, value=cn_ref_module_ids[-1], show_label=True)
-                                        cn_ref_weight = gr.Slider(label="Reference Control Weight", elem_id="cn_ref_weight",
-                                                                  minimum=0.0, maximum=2.0, value=1.0, step=0.05)
-                                        cn_ref_mode = gr.Dropdown(label="Reference Control Mode", elem_id="cn_ref_mode",
-                                                                  choices=cn_modes, value=cn_modes[0], show_label=True)
-                            else:
-                                with gr.Row():
-                                    gr.Markdown("The Multi ControlNet setting is currently set to 1.<br>"
-                                                "If you wish to use the Reference-Only Control, "
-                                                "please adjust the Multi ControlNet setting to 2 or more and restart the Web UI.")
-
-                        with gr.Row():
-                            with gr.Column():
-                                cn_module_id = gr.Dropdown(label="ControlNet Preprocessor", elem_id="cn_module_id",
-                                                           choices=cn_module_ids, value=cn_module_ids[cn_module_index], show_label=True)
-                                cn_model_id = gr.Dropdown(label="ControlNet Model ID", elem_id="cn_model_id",
-                                                          choices=cn_model_ids, value=cn_model_ids[0], show_label=True)
-                            with gr.Column():
-                                with gr.Row():
-                                    cn_inpaint_btn = gr.Button("Run ControlNet Inpaint", elem_id="cn_inpaint_btn", variant="primary")
-                                with gr.Row():
-                                    cn_save_mask_chk = gr.Checkbox(label="Save mask", elem_id="cn_save_mask_chk",
-                                                                   value=False, show_label=False, interactive=False, visible=False)
-                                    cn_iteration_count = gr.Slider(label="Iterations", elem_id="cn_iteration_count",
-                                                                   minimum=1, maximum=10, value=1, step=1)
-
-                        with gr.Row():
-                            if ia_check_versions.gradio_version_is_old:
-                                cn_out_image = gr.Gallery(label="Inpainted image", elem_id="ia_cn_out_image", show_label=False
-                                                          ).style(**out_gallery_kwargs)
-                            else:
-                                cn_out_image = gr.Gallery(label="Inpainted image", elem_id="ia_cn_out_image", show_label=False,
-                                                          **out_gallery_kwargs)
-
-                    else:
-                        if sam_dict["cnet"] is None:
-                            gr.Markdown("ControlNet extension is not available.<br>"
-                                        "Requires the [sd-webui-controlnet](https://github.com/Mikubill/sd-webui-controlnet) extension.")
-                        elif len(cn_module_ids) > 0:
-                            cn_models_directory = os.path.join("extensions", "sd-webui-controlnet", "models")
-                            gr.Markdown("ControlNet inpaint model is not available.<br>"
-                                        "Requires the [ControlNet-v1-1](https://huggingface.co/lllyasviel/ControlNet-v1-1/tree/main) inpaint model "
-                                        f"in the {cn_models_directory} directory.")
+                                    cn_ref_resize_mode = gr.Radio(label="Reference Image Resize Mode", elem_id="cn_ref_resize_mode",
+                                                                    choices=["resize", "tile"], value="resize", show_label=True)
+                                    if cn_ip_adapter:
+                                        cn_ipa_model_id = gr.Dropdown(label="IP-Adapter Model ID", elem_id="cn_ipa_model_id",
+                                                                        choices=cn_ipa_model_ids, value=cn_ipa_model_ids[0], show_label=True)
+                                    cn_ref_module_id = gr.Dropdown(label="Reference Type for Reference-Only", elem_id="cn_ref_module_id",
+                                                                    choices=cn_ref_module_ids, value=cn_ref_module_ids[-1], show_label=True)
+                                    cn_ref_weight = gr.Slider(label="Reference Control Weight", elem_id="cn_ref_weight",
+                                                                minimum=0.0, maximum=2.0, value=1.0, step=0.05)
+                                    cn_ref_mode = gr.Dropdown(label="Reference Control Mode", elem_id="cn_ref_mode",
+                                                                choices=cn_modes, value=cn_modes[0], show_label=True)
                         else:
-                            gr.Markdown("ControlNet inpaint preprocessor is not available.<br>"
-                                        "The local version of [sd-webui-controlnet](https://github.com/Mikubill/sd-webui-controlnet) extension may be old.")
-
-                with gr.Tab("Mask only", elem_id="mask_only_tab"):
-                    with gr.Row():
-                        with gr.Column():
-                            get_alpha_image_btn = gr.Button("Get mask as alpha of image", elem_id="get_alpha_image_btn")
-                        with gr.Column():
-                            get_mask_btn = gr.Button("Get mask", elem_id="get_mask_btn")
+                            with gr.Row():
+                                gr.Markdown("The Multi ControlNet setting is currently set to 1.<br>"
+                                            "If you wish to use the Reference-Only Control, "
+                                            "please adjust the Multi ControlNet setting to 2 or more and restart the Web UI.")
 
                     with gr.Row():
                         with gr.Column():
-                            alpha_out_image = gr.Image(label="Alpha channel image", elem_id="alpha_out_image", type="pil", image_mode="RGBA", interactive=False)
+                            cn_module_id = gr.Dropdown(label="ControlNet Preprocessor", elem_id="cn_module_id",
+                                                        choices=cn_module_ids, value=cn_module_ids[cn_module_index], show_label=True)
                         with gr.Column():
-                            mask_out_image = gr.Image(label="Mask image", elem_id="mask_out_image", type="numpy", interactive=False)
+                            cn_model_id = gr.Dropdown(label="ControlNet Model ID", elem_id="cn_model_id",
+                                                        choices=cn_model_ids, value=cn_model_ids[0], show_label=True)
+                        with gr.Column():
+                            cn_iteration_count = gr.Slider(label="Iterations", elem_id="cn_iteration_count",
+                                                            minimum=1, maximum=10, value=1, step=1)
+                        with gr.Column():
+                                cn_inpaint_btn = gr.Button("Run ControlNet Inpaint", elem_id="cn_inpaint_btn", variant="primary")
 
                     with gr.Row():
-                        with gr.Column():
-                            get_alpha_status_text = gr.Textbox(label="", elem_id="get_alpha_status_text", max_lines=1, show_label=False, interactive=False)
-                        with gr.Column():
-                            mask_send_to_inpaint_btn = gr.Button("Send to img2img inpaint", elem_id="mask_send_to_inpaint_btn")
+                            cn_save_mask_chk = gr.Checkbox(label="Save mask", elem_id="cn_save_mask_chk",
+                                                            value=False, show_label=False, interactive=False, visible=False)
+                    with gr.Row():
+                        if ia_check_versions.gradio_version_is_old:
+                            cn_out_image = gr.Gallery(label="Inpainted image", elem_id="ia_cn_out_image", show_label=False
+                                                        ).style(**out_gallery_kwargs)
+                        else:
+                            cn_out_image = gr.Gallery(label="Inpainted image", elem_id="ia_cn_out_image", show_label=False,
+                                                        **out_gallery_kwargs)
 
-            with gr.Column():
-                with gr.Row():
-                    gr.Markdown("Mouse over image: Press `S` key for Fullscreen mode, `R` key to Reset zoom")
-                with gr.Row():
-                    if ia_check_versions.gradio_version_is_old:
-                        sam_image = gr.Image(label="Segment Anything image", elem_id="ia_sam_image", type="numpy", tool="sketch", brush_radius=8,
-                                             show_label=False, interactive=True).style(height=480)
+                else:
+                    if sam_dict["cnet"] is None:
+                        gr.Markdown("ControlNet extension is not available.<br>"
+                                    "Requires the [sd-webui-controlnet](https://github.com/Mikubill/sd-webui-controlnet) extension.")
+                    elif len(cn_module_ids) > 0:
+                        cn_models_directory = os.path.join("extensions", "sd-webui-controlnet", "models")
+                        gr.Markdown("ControlNet inpaint model is not available.<br>"
+                                    "Requires the [ControlNet-v1-1](https://huggingface.co/lllyasviel/ControlNet-v1-1/tree/main) inpaint model "
+                                    f"in the {cn_models_directory} directory.")
                     else:
-                        sam_image = gr.Image(label="Segment Anything image", elem_id="ia_sam_image", type="numpy", tool="sketch", brush_radius=8,
-                                             show_label=False, interactive=True, height=480)
+                        gr.Markdown("ControlNet inpaint preprocessor is not available.<br>"
+                                    "The local version of [sd-webui-controlnet](https://github.com/Mikubill/sd-webui-controlnet) extension may be old.")
+
+            with gr.Tab("Mask only", elem_id="mask_only_tab", render=True):
+                with gr.Row():
+                    with gr.Column():
+                        get_alpha_image_btn = gr.Button("Generate image mask in RGBA", elem_id="get_alpha_image_btn")
+                    with gr.Column():
+                        get_mask_btn = gr.Button("Generate image mask in RGB", elem_id="get_mask_btn")
 
                 with gr.Row():
                     with gr.Column():
-                        select_btn = gr.Button("Create Mask", elem_id="select_btn", variant="primary")
+                        alpha_out_image = gr.Image(label="Alpha channel image", elem_id="alpha_out_image", type="pil", image_mode="RGBA", interactive=False)
                     with gr.Column():
-                        with gr.Row():
-                            invert_chk = gr.Checkbox(label="Invert mask", elem_id="invert_chk", show_label=True, interactive=True)
-                            ignore_black_chk = gr.Checkbox(label="Ignore black area", elem_id="ignore_black_chk", value=True, show_label=True, interactive=True)
+                        mask_out_image = gr.Image(label="Mask image", elem_id="mask_out_image", type="numpy", interactive=False)
 
-                with gr.Row():
-                    if ia_check_versions.gradio_version_is_old:
-                        sel_mask = gr.Image(label="Selected mask image", elem_id="ia_sel_mask", type="numpy", tool="sketch", brush_radius=12,
-                                            show_label=False, interactive=True).style(height=480)
-                    else:
-                        sel_mask = gr.Image(label="Selected mask image", elem_id="ia_sel_mask", type="numpy", tool="sketch", brush_radius=12,
-                                            show_label=False, interactive=True, height=480)
-
-                with gr.Row():
+                with gr.Row(visible=False):
                     with gr.Column():
-                        expand_mask_btn = gr.Button("Expand mask region", elem_id="expand_mask_btn")
-                        expand_mask_iteration_count = gr.Slider(label="Expand Mask Iterations",
-                                                                elem_id="expand_mask_iteration_count", minimum=1, maximum=100, value=1, step=1)
+                        get_alpha_status_text = gr.Textbox(label="", elem_id="get_alpha_status_text", max_lines=1, show_label=False, interactive=False)
                     with gr.Column():
-                        apply_mask_btn = gr.Button("Trim mask by sketch", elem_id="apply_mask_btn")
-                        add_mask_btn = gr.Button("Add mask by sketch", elem_id="add_mask_btn")
+                        mask_send_to_inpaint_btn = gr.Button("Send to img2img inpaint", elem_id="mask_send_to_inpaint_btn")
 
             load_model_btn.click(download_model, inputs=[sam_model_id], outputs=[status_text])
             input_image.upload(input_image_upload, inputs=[input_image, sam_image, sel_mask], outputs=[sam_image, sel_mask, sam_btn]).then(
@@ -1286,7 +1295,7 @@ def on_ui_tabs():
                     outputs=[webui_out_image, webui_iteration_count]).then(
                     fn=async_post_reload_model_weights, inputs=None, outputs=None)
 
-    return [(inpaint_anything_interface, "Inpaint Anything", "inpaint_anything")]
+    return [(inpaint_anything_interface, "Image segmentation and inpaint", "inpaint_anything")]
 
 
 def on_ui_settings():
