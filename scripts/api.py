@@ -126,6 +126,28 @@ class AddMaskResponse(BaseModel):
     sel_mask: str = Field(title="Selected Mask", description="The selected mask in base64 format.")
     mask_image: str = Field(title="Image Mask")
 
+def pack(array, bitdepth, bitorder="little"):
+    itemsize = array.dtype.itemsize
+    bits = np.unpackbits(
+        array.astype(f"<u{itemsize}", copy=False).view("u1").reshape(-1, itemsize),
+        axis=1,
+        bitorder="little",
+        count=bitdepth,
+    )
+    if bitorder == "big":
+        bits = bits[:, ::-1]
+    return np.packbits(bits, bitorder=bitorder)
+
+def unpack(buf, bitdepth, bitorder="little"):
+    bits = np.unpackbits(buf, bitorder=bitorder).reshape(-1, bitdepth)
+    if bitorder == "big":
+        bits = bits[:, ::-1]
+    bytes_ = np.packbits(bits, axis=1, bitorder="little")
+    itemsize = np.min_scalar_type((1 << bitdepth) - 1).itemsize
+    if bytes_.shape[1] < itemsize:
+        bytes_ = np.pad(bytes_, ((0, 0), (0, itemsize - bytes_.shape[1])))
+    return bytes_.reshape(-1).view(f"<u{itemsize}")
+
 def encode_image_to_base64(image):
     with io.BytesIO() as output_bytes:
         if isinstance(image, dict):
@@ -241,7 +263,12 @@ def sam_api(req: SamRequest):
             res_sam_mask = {}
             for key in sam_mask:
                 if key == 'segmentation':
-                    res_sam_mask[key] = json.dumps(sam_mask[key].tolist())
+                    compressed_data = {
+                        'height': sam_mask[key].shape[0],
+                        'width': sam_mask[key].shape[1],
+                        'data' : pack(sam_mask[key].astype(np.uint8), 1).tolist()
+                    }
+                    res_sam_mask[key] = compressed_data
                 else:
                     res_sam_mask[key] = sam_mask[key]
             res_sam_masks.append(res_sam_mask)
@@ -262,7 +289,9 @@ def mask_api(req: MaskRequest):
         sam_mask = {}
         for key in req_sam_mask:
             if key == 'segmentation':
-                sam_mask[key] = np.array(json.loads(req_sam_mask[key]))
+                compressed_data = req_sam_mask[key]
+                uncompressed_data = unpack(np.array(compressed_data['data'], dtype=np.uint8), 1).reshape(compressed_data['height'], compressed_data['width']).astype(bool)
+                sam_mask[key] = uncompressed_data
             else:
                 sam_mask[key] = req_sam_mask[key]
         sam_masks.append(sam_mask)
@@ -280,10 +309,8 @@ def mask_api(req: MaskRequest):
         mask = sam_image["mask"][:, :, 0:1]
         
         seg_image = inpalib.create_mask_image(mask, sam_masks, ignore_black_chk)
-        Image.fromarray(seg_image).save('mask02.png')
         if invert_chk:
             seg_image = inpalib.invert_mask(seg_image)
-        Image.fromarray(seg_image).save('mask03.png')
 
         if input_image is not None and input_image.shape == seg_image.shape:
             ret_image = cv2.addWeighted(input_image, 0.5, seg_image, 0.5, 0)
@@ -492,9 +519,6 @@ def cninpaint_api(req: CNInpaintRequest):
             pixel_perfect=True,
             control_mode=cn_mode,
         ))]
-
-        init_image.save('init0.png')
-        mask_image.save('mask0.png')
 
         if cn_ref_module_id is not None and cn_ref_image is not None:
             if cn_ref_resize_mode == "tile":
