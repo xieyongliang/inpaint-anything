@@ -375,6 +375,7 @@ def expand_mask_api(req: ExpandMaskRequest):
     try:
         input_image = np.array(decode_base64_to_image(req.input_image))
         new_sel_mask = np.array(decode_base64_to_image(req.mask_image))
+        expand_iteration = req.expand_iteration
 
         expand_iteration = int(np.clip(expand_iteration, 1, 100))
 
