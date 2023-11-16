@@ -110,7 +110,7 @@ class ExpandMaskResponse(BaseModel):
 
 class ApplyMaskRequest(BaseModel):
     input_image: str = Field(title="Input Image", description="The input image in base64 format.")
-    sel_mask: str = Field(title="Selected Mask", description="The selected mask in base64 format.")
+    sel_mask: dict = Field(title="Selected Mask", description="The selected mask in base64 format.")
     mask_image: str = Field(title="Image Mask")
 
 class ApplyMaskResponse(BaseModel):
@@ -119,7 +119,7 @@ class ApplyMaskResponse(BaseModel):
 
 class AddMaskRequest(BaseModel):
     input_image: str = Field(title="Input Image", description="The input image in base64 format.")
-    sel_mask: str = Field(title="Selected Mask", description="The selected mask in base64 format.")
+    sel_mask: dict = Field(title="Selected Mask", description="The selected mask in base64 format.")
     mask_image: str = Field(title="Image Mask")
 
 class AddMaskResponse(BaseModel):
