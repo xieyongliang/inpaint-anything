@@ -89,11 +89,11 @@ class CNInpaintResponse(BaseModel):
 class PaddingRequest(BaseModel):
     input_image: str = Field(title="Input Image", description="The input image in base64 format.")
     orig_image: str = Field(title="Origin Image", description="The origin image in base64 format.")
-    pad_scale_width: int = Field(title="Scale Width")
-    pad_scale_height: int = Field(title="Scale Height")
-    pad_lr_barance: int = Field(title="Left/Right Balance")
-    pad_tb_barance: int = Field(title="Top/Bottom Balance")
-    padding_mode: int = Field(default="edge", title="Padding Mode")
+    pad_scale_width: float = Field(title="Scale Width")
+    pad_scale_height: float = Field(title="Scale Height")
+    pad_lr_barance: float = Field(title="Left/Right Balance")
+    pad_tb_barance: float = Field(title="Top/Bottom Balance")
+    padding_mode: str = Field(default="edge", title="Padding Mode")
 
 class PaddingResponse(BaseModel):
     pad_image: str = Field(title="Pad Image", description="The pad image in base64 format.")
@@ -332,23 +332,28 @@ def padding_api(req: PaddingRequest):
 
     try:
         orig_image = np.array(decode_base64_to_image(req.orig_image))
+        pad_scale_width = req.pad_scale_width
+        pad_scale_height = req.pad_scale_height
+        pad_lr_barance = req.pad_lr_barance
+        pad_tb_barance = req.pad_tb_barance
+        padding_mode = req.padding_mode
 
         height, width = orig_image.shape[:2]
-        pad_width, pad_height = (int(width * req.pad_scale_width), int(height * req.pad_scale_height))
+        pad_width, pad_height = (int(width * pad_scale_width), int(height * pad_scale_height))
         ia_logging.info(f"resize by padding: ({height}, {width}) -> ({pad_height}, {pad_width})")
 
         pad_size_w, pad_size_h = (pad_width - width, pad_height - height)
-        pad_size_l = int(pad_size_w * req.pad_lr_barance)
+        pad_size_l = int(pad_size_w * pad_lr_barance)
         pad_size_r = pad_size_w - pad_size_l
-        pad_size_t = int(pad_size_h * req.pad_tb_barance)
+        pad_size_t = int(pad_size_h * pad_tb_barance)
         pad_size_b = pad_size_h - pad_size_t
 
         pad_width = [(pad_size_t, pad_size_b), (pad_size_l, pad_size_r), (0, 0)]
-        if req.padding_mode == "constant":
+        if padding_mode == "constant":
             fill_value = get_webui_setting("inpaint_anything_padding_fill", 127)
-            pad_image = np.pad(orig_image, pad_width=pad_width, mode=req.padding_mode, constant_values=fill_value)
+            pad_image = np.pad(orig_image, pad_width=pad_width, mode=padding_mode, constant_values=fill_value)
         else:
-            pad_image = np.pad(orig_image, pad_width=pad_width, mode=req.padding_mode)
+            pad_image = np.pad(orig_image, pad_width=pad_width, mode=padding_mode)
 
         mask_pad_width = [(pad_size_t, pad_size_b), (pad_size_l, pad_size_r)]
         pad_mask = np.zeros((height, width), dtype=np.uint8)
